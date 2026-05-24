@@ -13,7 +13,7 @@ A tool that will update and order your server's mods to its dependencies.
 3. Once in the correct directory, move the correct executable into the directory ready for use.
 
 ```sh
-.\ReforgerModSolver-windows-x64.exe input-config.json output-config.json
+.\ReforgerModSolver-windows-x64.exe input.json output.json
 ```
 
 ### Example

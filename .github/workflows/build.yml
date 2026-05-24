@@ -7,7 +7,9 @@ on:
 
 jobs:
   build:
-    # if: github.event.pull_request.merged == true
+    if: github.event.pull_request.merged == true
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -20,9 +22,8 @@ jobs:
         run: bun run build
       - name: Create Draft Release
         uses: softprops/action-gh-release@v2
-        id: release
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: "${{ github.head_ref }}"
           generate_release_notes: true
