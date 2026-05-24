@@ -1,4 +1,4 @@
-import { readFileSync } from "fs";
+import { readFileSync, writeFileSync } from "fs";
 
 type Mod = {
 	modId: string;
@@ -36,80 +36,97 @@ async function getModData(id: string) {
 	return JSON.parse(body).props.pageProps.asset;
 }
 
-export default async function solveFile(configFile: string) {
+function removeDuplicates<T extends ModData | Mod>(mods: T[]) {
+	let unique: T[] = [];
+	for (let mod of mods) {
+		let uniqueIdx = unique.findIndex(m => m.modId == <string>mod.modId);
+		if (uniqueIdx != -1) continue;
+		unique.push(mod);
+	}
+	return unique;
+}
+
+function convertModsToModData(mods: Mod[]) {
+	return mods.map(m => ({
+		modId: m.modId,
+		name: m.name,
+		version: m.version,
+		dependants: [],
+		gen: 0,
+	}));
+}
+
+function convertModDataToMods(mods: ModData[]) {
+	return mods.map(m => ({
+		modId: m.modId,
+		name: m.name,
+		version: m.version
+	}));
+}
+
+async function addDependencies(unindexed: ModData[]) {
+	let mods: ModData[] = [];
+	while (unindexed.length > 0) {
+		let mod = <ModData>unindexed.pop();
+		let data = await getModData(mod.modId);
+		mod.name = data.name;
+		mod.version = data.currentVersionNumber;
+		for (let dependency of data.dependencies) {
+			let modIdx = mods.findIndex(m => m.modId == <string>dependency.asset.id);
+			if (modIdx != -1) {
+				(<ModData>mods[modIdx]).dependants.push(mod);
+				continue;
+			}
+			let unindexedIdx = unindexed.findIndex(m => m.modId == <string>dependency.asset.id);
+			if (unindexedIdx != -1) {
+				(<ModData>unindexed[unindexedIdx]).dependants.push(mod);
+				continue;
+			}
+			unindexed.push({
+				modId: <string>dependency.asset.id,
+				name: <string>dependency.asset.name,
+				version: <string>dependency.version,
+				dependants: [mod],
+				gen: 0,
+			});
+		}
+		mods.push(mod);
+	}
+	return mods;
+}
+
+function determineLineage(mods: ModData[]) {
+	let changedThisIteration: boolean = true;
+	const HARD_ITER_LIMIT = 1;
+	for (var i = 0; i < HARD_ITER_LIMIT; i++) {
+		// hard limit 1000 iterations
+		if (changedThisIteration == false) break;
+		changedThisIteration = false;
+		for (let mod of mods) {
+			(() => {
+				if (mod.dependants.length <= 0) return;
+				for (let dependant of mod.dependants) {
+					if (dependant.gen > mod.gen)
+						continue;
+					changedThisIteration = true;
+					dependant.gen = mod.gen + 1;
+				}
+			})();
+		}
+	}
+}
+
+export default async function solveFile(configFile: string, outputFile: string) {
 	try {
 		let configText = wrap(() => readFileSync(configFile).toString("utf8"), "Failed to open config file.");
 		let config = wrap(() => JSON.parse(configText), "Failed to parse config file.");
-		let mods: ModData[] = [];
-		let unindexed: ModData[] = [];
-		for (let mod of config.game.mods) {
-			let unindexedIdx = unindexed.findIndex(m => m.modId == <string>mod.modId);
-			if (unindexedIdx != -1)
-				continue;
-			let data: ModData = {
-				modId: mod.modId,
-				name: mod.name,
-				version: mod.version,
-				dependants: [],
-				gen: 0,
-			};
-			unindexed.push(data);
-		}
-		while (unindexed.length > 0) {
-			let mod = <ModData>unindexed.pop();
-			let data = await getModData(mod.modId);
-			mod.name = data.name;
-			mod.version = data.currentVersionNumber;
-			for (let dependency of data.dependencies) {
-				let modIdx = mods.findIndex(m => m.modId == <string>dependency.asset.id);
-				if (modIdx != -1) {
-					(<ModData>mods[modIdx]).dependants.push(mod);
-					continue;
-				}
-				let unindexedIdx = unindexed.findIndex(m => m.modId == <string>dependency.asset.id);
-				if (unindexedIdx != -1) {
-					(<ModData>unindexed[unindexedIdx]).dependants.push(mod);
-					continue;
-				}
-				unindexed.push({
-					modId: <string>dependency.asset.id,
-					name: <string>dependency.asset.name,
-					version: <string>dependency.version,
-					dependants: [mod],
-					gen: 0,
-				});	
-			}
-			mods.push(mod);
-		}
-		let changedThisIteration: boolean = true;
-		
-		const HARD_ITER_LIMIT = 1;
-		
-		for (var i = 0; i < HARD_ITER_LIMIT; i++) { // hard limit 1000 iterations
-			if (changedThisIteration == false)
-				break;
-			changedThisIteration = false;
-			for (let mod of mods) {
-				if (mod.dependants.length > 0) {
-					for (let dependant of mod.dependants) {
-						if (dependant.gen <= mod.gen) {
-							changedThisIteration = true;
-							dependant.gen = mod.gen + 1;
-						}
-					}
-				}
-			}
-		}
+		let uniqueMods = removeDuplicates(config.game.mods);
+		let mods: ModData[] = convertModsToModData(uniqueMods);
+		mods = await addDependencies(mods);
+		determineLineage(mods);
 		mods.sort((a, b) => a.gen - b.gen);
-		config.game.mods = [];
-		for (let mod of mods) {
-			config.game.mods.push({
-				modId: mod.modId,
-				name: mod.name,
-				version: mod.version,
-			});
-		}
-		console.log(JSON.stringify(config,null,"\t"));
+		config.game.mods = convertModDataToMods(mods);
+		writeFileSync(outputFile, JSON.stringify(config, null, "\t"));
 	} catch (err) {
 		console.error(err);
 		return 2;
