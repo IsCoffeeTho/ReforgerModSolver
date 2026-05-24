@@ -97,7 +97,7 @@ async function addDependencies(unindexed: ModData[]) {
 
 function determineLineage(mods: ModData[]) {
 	let changedThisIteration: boolean = true;
-	const HARD_ITER_LIMIT = 1;
+	const HARD_ITER_LIMIT = 100;
 	for (var i = 0; i < HARD_ITER_LIMIT; i++) {
 		// hard limit 1000 iterations
 		if (changedThisIteration == false) break;
@@ -124,7 +124,12 @@ export default async function solveFile(configFile: string, outputFile: string) 
 		let mods: ModData[] = convertModsToModData(uniqueMods);
 		mods = await addDependencies(mods);
 		determineLineage(mods);
-		mods.sort((a, b) => a.gen - b.gen);
+		mods.sort((a, b) => {
+			let genHeuristic = a.gen - b.gen;
+			if (genHeuristic != 0)
+				return genHeuristic;
+			return a.name.localeCompare(b.name);
+		});
 		config.game.mods = convertModDataToMods(mods);
 		writeFileSync(outputFile, JSON.stringify(config, null, "\t"));
 	} catch (err) {
