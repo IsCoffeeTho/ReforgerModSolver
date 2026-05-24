@@ -1,0 +1,35 @@
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - latest
+
+jobs:
+  build:
+    # if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install Dependancies
+        run: bun install
+      - name: Build Binaries
+        run: bun run build
+      - name: Create Draft Release
+        uses: softprops/action-gh-release@v2
+        id: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT }}
+        with:
+          tag_name: "${{ github.head_ref }}"
+          generate_release_notes: true
+          files: |
+            build/${{ github.head_ref }}/*
+          preserve_order: true
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          make_latest: true
+          draft: true
