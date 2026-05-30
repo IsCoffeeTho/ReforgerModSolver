@@ -1,5 +1,8 @@
 changelog:
   categories:
-    - title: Major Fixes
+    - title: New Features
+      labels:
+        - feature
+    - title: Bug Fixes
       labels:
         - critical-issue

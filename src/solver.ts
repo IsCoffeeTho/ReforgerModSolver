@@ -1,3 +1,4 @@
+import { semver } from "bun";
 import { readFileSync, writeFileSync } from "fs";
 
 type Mod = {
@@ -60,7 +61,7 @@ function convertModDataToMods(mods: ModData[]) {
 	return mods.map(m => ({
 		modId: m.modId,
 		name: m.name,
-		version: m.version
+		version: m.version,
 	}));
 }
 
@@ -70,7 +71,8 @@ async function addDependencies(unindexed: ModData[]) {
 		let mod = <ModData>unindexed.pop();
 		let data = await getModData(mod.modId);
 		mod.name = data.name;
-		mod.version = data.currentVersionNumber;
+		if (!mod.version || (semver.order(mod.version, data.currentVersionNumber) == -1))
+			mod.version = data.currentVersionNumber;
 		for (let dependency of data.dependencies) {
 			let modIdx = mods.findIndex(m => m.modId == <string>dependency.asset.id);
 			if (modIdx != -1) {
@@ -98,16 +100,16 @@ async function addDependencies(unindexed: ModData[]) {
 function determineLineage(mods: ModData[]) {
 	let changedThisIteration: boolean = true;
 	const HARD_ITER_LIMIT = 100;
+	// hard limit 1000 iterations
+
 	for (var i = 0; i < HARD_ITER_LIMIT; i++) {
-		// hard limit 1000 iterations
 		if (changedThisIteration == false) break;
 		changedThisIteration = false;
 		for (let mod of mods) {
 			(() => {
 				if (mod.dependants.length <= 0) return;
 				for (let dependant of mod.dependants) {
-					if (dependant.gen > mod.gen)
-						continue;
+					if (dependant.gen > mod.gen) continue;
 					changedThisIteration = true;
 					dependant.gen = mod.gen + 1;
 				}
@@ -126,8 +128,7 @@ export default async function solveFile(configFile: string, outputFile: string) 
 		determineLineage(mods);
 		mods.sort((a, b) => {
 			let genHeuristic = a.gen - b.gen;
-			if (genHeuristic != 0)
-				return genHeuristic;
+			if (genHeuristic != 0) return genHeuristic;
 			return a.name.localeCompare(b.name);
 		});
 		config.game.mods = convertModDataToMods(mods);
