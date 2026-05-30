@@ -1,31 +1,24 @@
 import pkg from "./package.json";
 
 type buildTargetDescriptor = {
-	subTargets: string[],
-	fileExtension: string
+	subTargets: string[];
+	fileExtension: string;
 };
 
-const BUILD_TARGETS: { [platform:string]: buildTargetDescriptor } = {
-	"linux": {
-		subTargets: [
-			"x64",
-			"arm64"
-		],
-		fileExtension: ""
+type buildTargets = { [platform: string]: buildTargetDescriptor };
+
+const BUILD_TARGETS: buildTargets = {
+	linux: {
+		subTargets: ["x64", "arm64"],
+		fileExtension: "",
 	},
-	"windows": {
-		subTargets: [
-			"x64",
-			"arm64"
-		],
-		fileExtension: ".exe"
+	windows: {
+		subTargets: ["x64", "arm64"],
+		fileExtension: ".exe",
 	},
-	"darwin-arm64": {
-		subTargets: [
-			"x64",
-			"arm64"
-		],
-		fileExtension: ""
+	darwin: {
+		subTargets: ["x64", "arm64"],
+		fileExtension: "",
 	},
 };
 
@@ -36,13 +29,17 @@ let builds = [];
 for (let platform in BUILD_TARGETS) {
 	var target = <buildTargetDescriptor>BUILD_TARGETS[platform];
 	for (let subtarget of target.subTargets) {
-		builds.push(Bun.build({
-			entrypoints: ["./src/main.ts"],
-			compile: {
-				target: <Bun.Build.CompileTarget>`bun-${platform}-${subtarget}`,
-				outfile: `${BUILD_DIR}/v${pkg.verison}/ReforgerModSolver-${platform}-${subtarget}${target?.fileExtension}`
-			}
-		}))
+		builds.push((async () => {
+			console.log(`Compiling for ${platform} on ${subtarget}`);
+			await Bun.build({
+				entrypoints: ["./src/main.ts"],
+				compile: {
+					target: <Bun.Build.CompileTarget>`bun-${platform}-${subtarget}`,
+					outfile: `${BUILD_DIR}/v${pkg.version}/ReforgerModSolver-${platform}-${subtarget}${target?.fileExtension}`,
+				},
+			}),
+			console.log(`ReforgerModSolver-${platform}-${subtarget}${target?.fileExtension} Compiled`);
+		})());
 	}
 }
 
